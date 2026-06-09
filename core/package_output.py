@@ -124,6 +124,7 @@ class PackageOutput:
             can_submit = (
                 len(missing_required) == 0
                 and len(files_to_include) > 0
+                and len(validation_errors) == 0
                 and all(f.get("exists", False) for f in files_to_include)
             )
         except Exception as e:
@@ -151,11 +152,33 @@ class PackageOutput:
         result = {
             "success": False,
             "output_files": [],
+            "output_files_detail": [],
             "zip_path": "",
             "checklist_path": "",
             "errors": [],
+            "error": "",
             "preview": None
         }
+
+        current_batch = self.materials.get_current_batch()
+        if not current_batch:
+            result["error"] = "未设置批次，请先在模板生成步骤创建批次"
+            result["errors"].append(result["error"])
+            return result
+
+        if not current_batch.confirmed_files:
+            result["error"] = "批次中未确认任何文件，请先在批次管理中确认需要打包的文件"
+            result["errors"].append(result["error"])
+            return result
+
+        missing_files = []
+        for cf in current_batch.confirmed_files:
+            if not Path(cf).exists():
+                missing_files.append(Path(cf).name)
+        if missing_files:
+            result["error"] = f"确认的文件不存在: {', '.join(missing_files)}"
+            result["errors"].append(result["error"])
+            return result
 
         preview = self.get_submission_preview()
         result["preview"] = preview.to_dict()
@@ -167,12 +190,18 @@ class PackageOutput:
                 )
             if not preview.files_to_include:
                 result["errors"].append("没有可打包的文件")
+            if preview.validation_errors:
+                result["errors"].append(
+                    f"存在校验错误: {len(preview.validation_errors)} 个"
+                )
             if result["errors"]:
+                result["error"] = "；".join(result["errors"])
                 return result
 
         file_mapping = self._collect_confirmed_files() if use_batch else self._collect_all_files()
         if not file_mapping:
-            result["errors"].append("没有可打包的文件")
+            result["error"] = "没有可打包的文件"
+            result["errors"].append(result["error"])
             return result
 
         renamed_files = self._rename_files_by_platform_rule(file_mapping)
@@ -181,7 +210,27 @@ class PackageOutput:
         renamed_files.append(str(checklist_path))
         zip_path = self._create_zip_package(renamed_files)
         result["zip_path"] = str(zip_path)
+
+        output_files_detail = []
+        for i, (orig, renamed) in enumerate(zip(file_mapping, renamed_files[:-1])):
+            output_files_detail.append({
+                "name": Path(renamed).name,
+                "original_name": Path(orig.get("original_path", "")).name,
+                "original_path": orig.get("original_path", ""),
+                "renamed_path": str(renamed),
+                "source": "模板生成" if orig.get("is_generated", False) else "用户上传",
+                "material_code": orig.get("material_code", "")
+            })
+        output_files_detail.append({
+            "name": Path(checklist_path).name,
+            "original_name": Path(checklist_path).name,
+            "original_path": str(checklist_path),
+            "renamed_path": str(checklist_path),
+            "source": "系统生成",
+            "material_code": "TJQD"
+        })
         result["output_files"] = [str(f) for f in renamed_files]
+        result["output_files_detail"] = output_files_detail
         result["file_count"] = len(renamed_files)
         result["success"] = True
         return result

@@ -184,17 +184,11 @@ class DataTradingToolApp:
             self._show_current_step()
 
     def _finish(self):
-        if messagebox.askyesno("完成", "是否完成全部操作并记录本次生成？"):
+        if messagebox.askyesno("完成", "是否退出程序？"):
             if self.package_result and self.package_result.get("success"):
-                self.record_manager.save_record(
-                    self.project_info,
-                    self.material_list,
-                    self.generated_files,
-                    self.validation_result.to_dict() if self.validation_result else {},
-                    self.package_result.get("zip_path", ""),
-                    self.material_list.current_batch_id or ""
-                )
-                messagebox.showinfo("成功", f"材料生成完成！\n\n压缩包路径：{self.package_result.get('zip_path')}\n\n记录已保存。")
+                messagebox.showinfo("完成", f"材料生成完成！\n\n压缩包路径：{self.package_result.get('zip_path')}\n\n记录已保存到历史记录。")
+            else:
+                messagebox.showinfo("完成", "操作已结束。")
             self.root.destroy()
 
     def _create_step1(self):
@@ -1261,6 +1255,9 @@ class DataTradingToolApp:
                 reasons.append("未设置批次")
             if not preview.files_to_include:
                 reasons.append("无待打包文件")
+            elif not all(f.get("exists", False) for f in preview.files_to_include):
+                missing_count = sum(1 for f in preview.files_to_include if not f.get("exists", False))
+                reasons.append(f"{missing_count}个文件不存在")
             if preview.missing_required:
                 reasons.append(f"{len(preview.missing_required)}个必填材料缺失")
             if preview.validation_errors:
@@ -1391,7 +1388,15 @@ class DataTradingToolApp:
             return
 
         if not self.submission_preview.can_submit and not self.ignore_errors_var.get():
-            if not messagebox.askyesno("确认", "存在必填材料缺失或校验错误，确定要继续打包吗？"):
+            reasons = []
+            if self.submission_preview.missing_required:
+                reasons.append(f"{len(self.submission_preview.missing_required)}个必填材料缺失")
+            if self.submission_preview.validation_errors:
+                reasons.append(f"{len(self.submission_preview.validation_errors)}个校验错误")
+            if not self.submission_preview.files_to_include:
+                reasons.append("无待打包文件")
+            reason_str = "、".join(reasons) if reasons else "提交前检查未通过"
+            if not messagebox.askyesno("确认", f"{reason_str}，确定要继续打包吗？"):
                 return
 
         self.package_log.configure(state="normal")
@@ -1423,6 +1428,11 @@ class DataTradingToolApp:
                 error_msg = result.get('error', '未知错误')
                 self.package_log.insert(tk.END, f"\n✗ 打包失败\n")
                 self.package_log.insert(tk.END, f"错误原因: {error_msg}\n")
+                if result.get('errors'):
+                    self.package_log.insert(tk.END, "\n详细错误:\n")
+                    for i, err in enumerate(result['errors'], 1):
+                        self.package_log.insert(tk.END, f"  {i}. {err}\n")
+                self.package_log.insert(tk.END, f"{'='*60}\n")
                 self.package_log.configure(state="disabled")
                 messagebox.showerror("打包失败", f"打包失败: {error_msg}")
                 return
@@ -1437,10 +1447,19 @@ class DataTradingToolApp:
             self.package_log.insert(tk.END, f"📄 提交清单:\n   {result['checklist_path']}\n\n")
             self.package_log.insert(tk.END, f"📊 包含文件: {result['file_count']} 个\n")
 
-            if result.get('output_files'):
+            file_list = result.get('output_files_detail', result.get('output_files', []))
+            if file_list:
                 self.package_log.insert(tk.END, "\n文件清单:\n")
-                for i, f in enumerate(result['output_files'], 1):
-                    self.package_log.insert(tk.END, f"  {i:2d}. {f.get('name', f.get('original_name', ''))}\n")
+                for i, f in enumerate(file_list, 1):
+                    if isinstance(f, dict):
+                        name = f.get('name', f.get('original_name', ''))
+                        source = f.get('source', '')
+                        self.package_log.insert(tk.END, f"  {i:2d}. {name}")
+                        if source:
+                            self.package_log.insert(tk.END, f" ({source})")
+                        self.package_log.insert(tk.END, "\n")
+                    else:
+                        self.package_log.insert(tk.END, f"  {i:2d}. {Path(f).name}\n")
 
             self.last_zip_path = result['zip_path']
             self.last_checklist_path = result['checklist_path']
