@@ -1,38 +1,149 @@
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from datetime import datetime
+from dataclasses import dataclass
 from docx import Document
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from core.project_info import ProjectInfo
+from core.material_list import MaterialList
 from config import OUTPUT_DIR, TEMPLATES_DIR
 
 
+@dataclass
+class GenerationResult:
+    material_code: str
+    material_name: str
+    file_path: str
+    success: bool
+    error_message: str = ""
+    is_new: bool = False
+    batch_id: str = ""
+
+
+GENERATE_STRATEGIES = ["overwrite", "new_version", "update_selected"]
+
+
 class TemplateGenerator:
-    def __init__(self, project_info: ProjectInfo):
+    GENERATE_STRATEGIES = GENERATE_STRATEGIES
+
+    def __init__(self, project_info: ProjectInfo, material_list: MaterialList = None):
         self.project = project_info
+        self.materials = material_list
         self.output_dir = OUTPUT_DIR / project_info.project_id
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._existing_files = self._scan_existing_files()
 
-    def generate_all(self) -> Dict[str, str]:
+    def _scan_existing_files(self) -> Dict[str, str]:
+        existing = {}
+        if not self.output_dir.exists():
+            return existing
+        for f in self.output_dir.iterdir():
+            if f.is_file() and f.suffix in ['.docx', '.xlsx']:
+                if '_CPMS_' in f.name or 'CPMS' in f.stem:
+                    existing['CPMS'] = str(f)
+                elif '_SQMS_' in f.name or 'SQMS' in f.stem:
+                    existing['SQMS'] = str(f)
+                elif '_YLDQ_' in f.name or 'YLDQ' in f.stem:
+                    existing['YLDQ'] = str(f)
+        return existing
+
+    def generate_all(self, strategy: str = "overwrite",
+                     selected_codes: List[str] = None,
+                     batch_name: str = "") -> Dict:
+        if strategy not in self.GENERATE_STRATEGIES:
+            strategy = "overwrite"
+
+        material_codes = selected_codes or ["CPMS", "SQMS", "YLDQ"]
         results = {}
-        try:
-            results["product_desc"] = self.generate_product_description()
-        except Exception as e:
-            results["product_desc_error"] = str(e)
-        try:
-            results["auth_desc"] = self.generate_authorization_description()
-        except Exception as e:
-            results["auth_desc_error"] = str(e)
-        try:
-            results["sample_fields"] = self.generate_sample_fields_list()
-        except Exception as e:
-            results["sample_fields_error"] = str(e)
+        generation_results = []
+
+        batch = None
+        if self.materials:
+            batch = self.materials.create_batch(
+                name=batch_name,
+                strategy=strategy,
+                material_codes=material_codes
+            )
+
+        for code in material_codes:
+            if code == "CPMS" and (selected_codes is None or "CPMS" in selected_codes):
+                result = self._generate_with_strategy(
+                    "product_desc", code, "产品说明文档",
+                    self.generate_product_description, strategy, batch
+                )
+                generation_results.append(result)
+                if result.success:
+                    results["product_desc"] = result.file_path
+                elif result.error_message:
+                    results["product_desc_error"] = result.error_message
+
+            elif code == "SQMS" and (selected_codes is None or "SQMS" in selected_codes):
+                result = self._generate_with_strategy(
+                    "auth_desc", code, "授权说明文档",
+                    self.generate_authorization_description, strategy, batch
+                )
+                generation_results.append(result)
+                if result.success:
+                    results["auth_desc"] = result.file_path
+                elif result.error_message:
+                    results["auth_desc_error"] = result.error_message
+
+            elif code == "YLDQ" and (selected_codes is None or "YLDQ" in selected_codes):
+                result = self._generate_with_strategy(
+                    "sample_fields", code, "样例字段清单",
+                    self.generate_sample_fields_list, strategy, batch
+                )
+                generation_results.append(result)
+                if result.success:
+                    results["sample_fields"] = result.file_path
+                elif result.error_message:
+                    results["sample_fields_error"] = result.error_message
+
+        results["_generation_results"] = [r.__dict__ for r in generation_results]
+        results["_batch_id"] = batch.batch_id if batch else ""
+        results["_strategy"] = strategy
+
+        if self.materials and batch:
+            confirmed = [r.file_path for r in generation_results if r.success]
+            for item in self.materials.get_provided():
+                if item.file_path and not item.generated:
+                    confirmed.append(item.file_path)
+            self.materials.confirm_batch_files(batch.batch_id, confirmed)
+
         return results
 
-    def generate_product_description(self) -> str:
+    def _generate_with_strategy(self, key: str, code: str, name: str,
+                                generate_func, strategy: str, batch) -> GenerationResult:
+        batch_id = batch.batch_id if batch else ""
+        existing = self._existing_files.get(code)
+
+        try:
+            if strategy == "overwrite":
+                file_path = generate_func()
+                is_new = not existing or existing != file_path
+                if self.materials:
+                    self.materials.mark_generated(code, True, batch_id)
+                return GenerationResult(code, name, file_path, True, "", is_new, batch_id)
+
+            elif strategy == "new_version":
+                file_path = generate_func(new_version=True)
+                if self.materials:
+                    self.materials.mark_generated(code, True, batch_id)
+                return GenerationResult(code, name, file_path, True, "", True, batch_id)
+
+            elif strategy == "update_selected":
+                file_path = generate_func()
+                if self.materials:
+                    self.materials.mark_generated(code, True, batch_id)
+                return GenerationResult(code, name, file_path, True, "", not existing, batch_id)
+
+        except Exception as e:
+            return GenerationResult(code, name, "", False, str(e), False, batch_id)
+
+    def generate_product_description(self, new_version: bool = False) -> str:
         doc = Document()
         title = doc.add_heading(f"{self.project.product_name} - 产品说明", 0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -78,12 +189,12 @@ class TemplateGenerator:
             f"电子邮箱：{self.project.contact_email or '待定'}"
         ])
         self._add_footer(doc)
-        filename = f"{self._get_filename_prefix()}_CPMS_产品说明.docx"
+        filename = self._get_filename("CPMS_产品说明", ".docx", new_version)
         filepath = self.output_dir / filename
         doc.save(filepath)
         return str(filepath)
 
-    def generate_authorization_description(self) -> str:
+    def generate_authorization_description(self, new_version: bool = False) -> str:
         doc = Document()
         title = doc.add_heading(f"{self.project.product_name} - 授权说明", 0)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -115,12 +226,12 @@ class TemplateGenerator:
         doc.add_paragraph()
         doc.add_paragraph("日期：")
         self._add_footer(doc)
-        filename = f"{self._get_filename_prefix()}_SQMS_授权说明.docx"
+        filename = self._get_filename("SQMS_授权说明", ".docx", new_version)
         filepath = self.output_dir / filename
         doc.save(filepath)
         return str(filepath)
 
-    def generate_sample_fields_list(self) -> str:
+    def generate_sample_fields_list(self, new_version: bool = False) -> str:
         wb = Workbook()
         ws = wb.active
         ws.title = "样例字段清单"
@@ -141,11 +252,10 @@ class TemplateGenerator:
             ws.cell(row=row_idx, column=1, value=key).font = Font(bold=True)
             ws.cell(row=row_idx, column=2, value=value)
         start_row = len(info_rows) + 3
-        header_row = ws.cell(row=start_row, column=1)
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=start_row, column=col, value=header)
             cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+            cell.fill = PatternFill(start_color="4472C4", end_color="#4472C4", fill_type="solid")
             cell.alignment = Alignment(horizontal="center", vertical="center")
         thin_border = Border(
             left=Side(style='thin'),
@@ -170,16 +280,25 @@ class TemplateGenerator:
             ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
         for col in range(1, 7):
             ws.column_dimensions[chr(64 + col)].width = 20
-        filename = f"{self._get_filename_prefix()}_YLDQ_样例字段清单.xlsx"
+        filename = self._get_filename("YLDQ_样例字段清单", ".xlsx", new_version)
         filepath = self.output_dir / filename
         wb.save(filepath)
         return str(filepath)
 
-    def _get_filename_prefix(self) -> str:
+    def _get_filename(self, suffix: str, extension: str, new_version: bool = False) -> str:
         date_str = datetime.now().strftime("%Y%m%d")
-        scene = self.project.trading_scene[:4] if self.project.trading_scene else "场景"
-        code = self.project.product_code if self.project.product_code else self.project.project_id
-        return f"{code}_{scene}_{date_str}"
+        time_str = datetime.now().strftime("%H%M%S")
+        scene = self._safe_filename(self.project.trading_scene[:4] if self.project.trading_scene else "场景")
+        code = self._safe_filename(self.project.product_code if self.project.product_code else self.project.project_id)
+        if new_version:
+            return f"{code}_{scene}_{date_str}_{time_str}_{suffix}{extension}"
+        return f"{code}_{scene}_{date_str}_{suffix}{extension}"
+
+    def _safe_filename(self, filename: str) -> str:
+        invalid_chars = '<>:"/\\|?*'
+        for ch in invalid_chars:
+            filename = filename.replace(ch, '_')
+        return filename.strip() or "unnamed"
 
     def _add_section(self, doc: Document, title: str, contents: List[str]) -> None:
         heading = doc.add_heading(title, level=1)

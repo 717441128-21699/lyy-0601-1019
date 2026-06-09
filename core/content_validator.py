@@ -12,6 +12,8 @@ class ValidationResult:
         self.errors: List[str] = []
         self.warnings: List[str] = []
         self.sensitive_hits: List[Dict] = []
+        self.passed: bool = True
+        self.timestamp: str = ""
 
     @property
     def has_errors(self) -> bool:
@@ -27,16 +29,24 @@ class ValidationResult:
 
     def add_error(self, msg: str) -> None:
         self.errors.append(msg)
+        self.passed = False
 
     def add_warning(self, msg: str) -> None:
         self.warnings.append(msg)
 
-    def add_sensitive(self, word: str, location: str, context: str = "") -> None:
+    def add_sensitive(self, word: str, location: str, context: str = "", line: int = 0) -> None:
         self.sensitive_hits.append({
             "word": word,
             "location": location,
-            "context": context
+            "context": context,
+            "line": line,
+            "words": [word],
+            "file": location
         })
+
+    @property
+    def sensitive_warnings(self) -> List[Dict]:
+        return self.sensitive_hits
 
     def to_dict(self) -> Dict:
         return {
@@ -45,7 +55,10 @@ class ValidationResult:
             "has_sensitive": self.has_sensitive,
             "errors": self.errors,
             "warnings": self.warnings,
-            "sensitive_hits": self.sensitive_hits
+            "sensitive_hits": self.sensitive_hits,
+            "sensitive_warnings": self.sensitive_hits,
+            "passed": self.passed,
+            "timestamp": self.timestamp
         }
 
 
@@ -57,12 +70,20 @@ class ContentValidator:
 
     def validate_all(self) -> ValidationResult:
         result = ValidationResult()
+        result.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._validate_contact_info(result)
         self._validate_validity_period(result)
         self._validate_materials(result)
         self._check_sensitive_content(result)
         self._validate_basic_info(result)
         return result
+
+    def validate(self, project_info=None, material_list=None, generated_files=None) -> ValidationResult:
+        if project_info:
+            self.project = project_info
+        if material_list:
+            self.materials = material_list
+        return self.validate_all()
 
     def _validate_basic_info(self, result: ValidationResult) -> None:
         errors = self.project.validate_basic()
