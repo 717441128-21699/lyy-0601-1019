@@ -1084,52 +1084,97 @@ class DataTradingToolApp:
         main_frame = ttk.Frame(self.content_container, style="Step.TFrame")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-        ttk.Label(main_frame, text="打包输出 - 提交预览",
+        ttk.Label(main_frame, text="打包输出 - 提交前检查",
                  font=('Microsoft YaHei', 14, 'bold')).pack(anchor=tk.W, pady=(0, 10))
         ttk.Label(main_frame,
-                 text="请先查看提交预览，确认内容无误后再生成压缩包。",
+                 text="请先查看各项检查结果，确认无误后再生成压缩包。",
                  foreground="#666").pack(anchor=tk.W, pady=(0, 15))
 
         top_btn_frame = ttk.Frame(main_frame)
         top_btn_frame.pack(fill=tk.X, pady=10)
-        ttk.Button(top_btn_frame, text="刷新预览", command=self._refresh_submission_preview,
+        ttk.Button(top_btn_frame, text="🔄 刷新检查", command=self._refresh_submission_preview,
                    style="Primary.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(top_btn_frame, text="管理确认文件", command=self._manage_current_batch_files,
+        ttk.Button(top_btn_frame, text="📋 管理确认文件", command=self._manage_current_batch_files,
                    style="Nav.TButton").pack(side=tk.LEFT, padx=5)
 
-        preview_frame = ttk.LabelFrame(main_frame, text="提交预览", style="Section.TLabelframe", padding=15)
-        preview_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        self.submit_status_frame = ttk.LabelFrame(main_frame, text="提交状态", style="Section.TLabelframe", padding=15)
+        self.submit_status_frame.pack(fill=tk.X, pady=5)
 
-        self.preview_text = scrolledtext.ScrolledText(preview_frame, height=16, font=('Microsoft YaHei', 10))
-        self.preview_text.pack(fill=tk.BOTH, expand=True)
-        self.preview_text.insert(tk.END, "点击【刷新预览】按钮，查看即将打包的内容...\n")
-        self.preview_text.configure(state="disabled")
+        self.submit_status_label = ttk.Label(self.submit_status_frame, text="", font=('Microsoft YaHei', 12, 'bold'))
+        self.submit_status_label.pack(anchor=tk.W)
 
-        if self.validation_result and self.validation_result.has_errors:
-            warning_frame = ttk.Frame(main_frame)
-            warning_frame.pack(fill=tk.X, pady=10)
-            ttk.Label(warning_frame, text="⚠ 校验存在错误，建议返回修正后再打包。",
-                     foreground="#FF0000", font=('Microsoft YaHei', 11, 'bold')).pack(side=tk.LEFT)
-            self.ignore_errors_var = tk.BooleanVar(value=False)
-            ttk.Checkbutton(warning_frame, text="忽略错误继续打包", variable=self.ignore_errors_var).pack(side=tk.LEFT, padx=20)
+        self.submit_reason_label = ttk.Label(self.submit_status_frame, text="", foreground="#666")
+        self.submit_reason_label.pack(anchor=tk.W, pady=(5, 0))
+
+        panels_frame = ttk.Frame(main_frame)
+        panels_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+
+        left_panel = ttk.Frame(panels_frame)
+        left_panel.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+
+        right_panel = ttk.Frame(panels_frame)
+        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
+
+        files_frame = ttk.LabelFrame(left_panel, text="📦 待打包文件", style="Section.TLabelframe", padding=10)
+        files_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        self.preview_files_list = tk.Listbox(files_frame, font=('Consolas', 10), height=8)
+        self.preview_files_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        files_scroll = ttk.Scrollbar(files_frame, orient="vertical", command=self.preview_files_list.yview)
+        files_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.preview_files_list.configure(yscrollcommand=files_scroll.set)
+
+        missing_frame = ttk.LabelFrame(left_panel, text="❌ 缺失材料", style="Section.TLabelframe", padding=10)
+        missing_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.preview_missing_list = tk.Listbox(missing_frame, font=('Consolas', 10), height=6, foreground="#c62828")
+        self.preview_missing_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        sensitive_frame = ttk.LabelFrame(left_panel, text="⚠️ 敏感词警告", style="Section.TLabelframe", padding=10)
+        sensitive_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        self.preview_sensitive_list = tk.Listbox(sensitive_frame, font=('Consolas', 10), height=5, foreground="#ef6c00")
+        self.preview_sensitive_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        errors_frame = ttk.LabelFrame(right_panel, text="❌ 校验错误", style="Section.TLabelframe", padding=10)
+        errors_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
+        self.preview_errors_list = tk.Listbox(errors_frame, font=('Consolas', 10), height=7, foreground="#c62828")
+        self.preview_errors_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        warnings_frame = ttk.LabelFrame(right_panel, text="⚠️ 校验警告", style="Section.TLabelframe", padding=10)
+        warnings_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.preview_warnings_list = tk.Listbox(warnings_frame, font=('Consolas', 10), height=6, foreground="#ef6c00")
+        self.preview_warnings_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        batch_info_frame = ttk.LabelFrame(right_panel, text="📊 批次信息", style="Section.TLabelframe", padding=10)
+        batch_info_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        self.batch_info_text = scrolledtext.ScrolledText(batch_info_frame, font=('Consolas', 10), height=5)
+        self.batch_info_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.batch_info_text.configure(state="disabled")
+
+        self.ignore_errors_var = tk.BooleanVar(value=False)
+        warning_frame = ttk.Frame(main_frame)
+        warning_frame.pack(fill=tk.X, pady=5)
+        self.warning_label = ttk.Label(warning_frame, text="", foreground="#FF0000", font=('Microsoft YaHei', 10, 'bold'))
+        self.warning_label.pack(side=tk.LEFT)
+        self.ignore_errors_check = ttk.Checkbutton(warning_frame, text="忽略错误继续打包", variable=self.ignore_errors_var)
+        self.ignore_errors_check.pack(side=tk.LEFT, padx=20)
+        self.ignore_errors_check.pack_forget()
 
         bottom_btn_frame = ttk.Frame(main_frame)
         bottom_btn_frame.pack(fill=tk.X, pady=10)
-        ttk.Button(bottom_btn_frame, text="确认并生成压缩包", command=self._build_package,
+        ttk.Button(bottom_btn_frame, text="✅ 确认并生成压缩包", command=self._build_package,
                    style="Success.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(bottom_btn_frame, text="查看提交清单", command=self._view_checklist,
+        ttk.Button(bottom_btn_frame, text="📄 查看提交清单", command=self._view_checklist,
                    style="Nav.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(bottom_btn_frame, text="打开压缩包", command=self._open_zip,
+        ttk.Button(bottom_btn_frame, text="📦 打开压缩包", command=self._open_zip,
                    style="Nav.TButton").pack(side=tk.LEFT, padx=5)
-        ttk.Button(bottom_btn_frame, text="打开输出目录", command=self._open_output_dir,
+        ttk.Button(bottom_btn_frame, text="📂 打开输出目录", command=self._open_output_dir,
                    style="Nav.TButton").pack(side=tk.LEFT, padx=5)
 
-        log_frame = ttk.LabelFrame(main_frame, text="打包日志", style="Section.TLabelframe", padding=15)
+        log_frame = ttk.LabelFrame(main_frame, text="📝 打包日志", style="Section.TLabelframe", padding=15)
         log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
         self.package_log = scrolledtext.ScrolledText(log_frame, height=8, font=('Consolas', 10))
         self.package_log.pack(fill=tk.BOTH, expand=True)
-        self.package_log.insert(tk.END, "确认预览内容无误后，点击【确认并生成压缩包】按钮...\n")
+        self.package_log.insert(tk.END, "点击【刷新检查】按钮查看提交前检查结果...\n")
         self.package_log.configure(state="disabled")
 
         self.package_summary = ttk.Label(main_frame, text="", font=('Microsoft YaHei', 11, 'bold'))
@@ -1150,87 +1195,164 @@ class DataTradingToolApp:
         self._refresh_submission_preview()
 
     def _refresh_submission_preview(self):
-        packager = PackageOutput(self.project_info, self.material_list,
-                                  self.generated_files, self.validation_result)
-        preview = packager.get_submission_preview()
-        self.submission_preview = preview
+        try:
+            packager = PackageOutput(self.project_info, self.material_list,
+                                      self.generated_files, self.validation_result)
+            preview = packager.get_submission_preview()
+            self.submission_preview = preview
+        except Exception as e:
+            self._show_preview_error(f"获取预览数据失败: {str(e)}")
+            return
 
-        self.preview_text.configure(state="normal")
-        self.preview_text.delete("1.0", tk.END)
+        self._clear_all_preview_lists()
 
         current_batch = self.material_list.get_current_batch()
-        batch_info = f"当前批次：{current_batch.batch_name} ({current_batch.batch_id})" if current_batch else "当前批次：未设置"
-
-        self.preview_text.insert(tk.END, f"提交预览报告\n{'='*60}\n\n")
-        self.preview_text.insert(tk.END, f"生成时间：{self._current_time()}\n")
-        self.preview_text.insert(tk.END, f"{batch_info}\n\n")
-
-        self.preview_text.insert(tk.END, f"一、待打包文件 ({len(preview.files_to_include)} 个)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.files_to_include:
-            for i, f in enumerate(preview.files_to_include, 1):
-                status = "✓ 已确认" if f.get('confirmed') else "○ 未确认"
-                self.preview_text.insert(tk.END, f"{i:2d}. [{status}] {f['name']}\n")
-                self.preview_text.insert(tk.END, f"     来源: {f['source']}\n")
-                if f.get('size'):
-                    self.preview_text.insert(tk.END, f"     大小: {f['size']}\n")
-        else:
-            self.preview_text.insert(tk.END, "  (无待打包文件)\n")
-
-        self.preview_text.insert(tk.END, f"\n二、缺失的必填材料 ({len(preview.missing_required)} 个)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.missing_required:
-            for m in preview.missing_required:
-                self.preview_text.insert(tk.END, f"  ✗ {m.code} - {m.name}\n")
-        else:
-            self.preview_text.insert(tk.END, "  ✓ 所有必填材料已齐全\n")
-
-        self.preview_text.insert(tk.END, f"\n三、缺失的选填材料 ({len(preview.missing_optional)} 个)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.missing_optional:
-            for m in preview.missing_optional:
-                self.preview_text.insert(tk.END, f"  ○ {m.code} - {m.name}\n")
-        else:
-            self.preview_text.insert(tk.END, "  ✓ 所有选填材料已齐全\n")
-
-        self.preview_text.insert(tk.END, f"\n四、敏感词警告 ({len(preview.sensitive_warnings)} 条)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.sensitive_warnings:
-            for i, w in enumerate(preview.sensitive_warnings, 1):
-                self.preview_text.insert(tk.END, f"{i:2d}. 文件: {w['file']}\n")
-                self.preview_text.insert(tk.END, f"     敏感词: {', '.join(w['words'])}\n")
-                self.preview_text.insert(tk.END, f"     位置: 第 {w['line']} 行\n")
-        else:
-            self.preview_text.insert(tk.END, "  ✓ 未检测到敏感词\n")
-
-        self.preview_text.insert(tk.END, f"\n五、校验错误 ({len(preview.validation_errors)} 条)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.validation_errors:
-            for e in preview.validation_errors:
-                self.preview_text.insert(tk.END, f"  ✗ {e}\n")
-        else:
-            self.preview_text.insert(tk.END, "  ✓ 无校验错误\n")
-
-        self.preview_text.insert(tk.END, f"\n六、校验警告 ({len(preview.validation_warnings)} 条)\n")
-        self.preview_text.insert(tk.END, f"{'-'*60}\n")
-        if preview.validation_warnings:
-            for w in preview.validation_warnings:
-                self.preview_text.insert(tk.END, f"  ⚠ {w}\n")
-        else:
-            self.preview_text.insert(tk.END, "  ✓ 无校验警告\n")
-
-        self.preview_text.insert(tk.END, f"\n{'='*60}\n")
-        if preview.can_submit:
-            self.preview_text.insert(tk.END, "✓ 可以提交\n", "ok")
-        else:
-            self.preview_text.insert(tk.END, "✗ 存在问题，请先修正后再提交\n", "error")
-
-        self.preview_text.tag_configure("ok", foreground="#2e7d32")
-        self.preview_text.tag_configure("error", foreground="#c62828")
-        self.preview_text.configure(state="disabled")
-
-        self._update_validation_display(preview)
+        self._update_batch_info(current_batch)
+        self._update_submit_status(preview, current_batch)
+        self._update_files_list(preview.files_to_include)
+        self._update_missing_list(preview.missing_required, preview.missing_optional)
+        self._update_sensitive_list(preview.sensitive_warnings)
+        self._update_errors_list(preview.validation_errors)
+        self._update_warnings_list(preview.validation_warnings)
+        self._update_warning_display(preview)
         self._update_package_summary(preview)
+
+    def _show_preview_error(self, error_msg):
+        self._clear_all_preview_lists()
+        self.submit_status_label.configure(text="✗ 预览加载失败", foreground="#c62828")
+        self.submit_reason_label.configure(text=error_msg)
+        self.preview_files_list.insert(tk.END, f"错误: {error_msg}")
+        self.preview_files_list.insert(tk.END, "请检查项目信息和材料是否完整")
+        self.preview_files_list.configure(foreground="#c62828")
+
+    def _clear_all_preview_lists(self):
+        for lst in [self.preview_files_list, self.preview_missing_list,
+                    self.preview_sensitive_list, self.preview_errors_list,
+                    self.preview_warnings_list]:
+            lst.delete(0, tk.END)
+            lst.configure(foreground="black")
+        self.batch_info_text.configure(state="normal")
+        self.batch_info_text.delete("1.0", tk.END)
+        self.batch_info_text.configure(state="disabled")
+        self.warning_label.configure(text="")
+        self.ignore_errors_check.pack_forget()
+
+    def _update_batch_info(self, current_batch):
+        self.batch_info_text.configure(state="normal")
+        self.batch_info_text.insert(tk.END, f"检查时间: {self._current_time()}\n")
+        if current_batch:
+            self.batch_info_text.insert(tk.END, f"当前批次: {current_batch.batch_name}\n")
+            self.batch_info_text.insert(tk.END, f"批次ID: {current_batch.batch_id}\n")
+            self.batch_info_text.insert(tk.END, f"生成策略: {current_batch.strategy}\n")
+            self.batch_info_text.insert(tk.END, f"已确认文件: {len(current_batch.confirmed_files)} 个\n")
+        else:
+            self.batch_info_text.insert(tk.END, "当前批次: 未设置\n")
+            self.batch_info_text.insert(tk.END, "提示: 请先在模板生成步骤创建批次\n")
+        self.batch_info_text.configure(state="disabled")
+
+    def _update_submit_status(self, preview, current_batch):
+        reasons = []
+        if preview.can_submit:
+            self.submit_status_label.configure(text="✓ 可以提交", foreground="#2e7d32")
+            self.submit_reason_label.configure(text="所有检查项通过，可以生成压缩包")
+        else:
+            self.submit_status_label.configure(text="✗ 暂不可提交", foreground="#c62828")
+            if not current_batch:
+                reasons.append("未设置批次")
+            if not preview.files_to_include:
+                reasons.append("无待打包文件")
+            if preview.missing_required:
+                reasons.append(f"{len(preview.missing_required)}个必填材料缺失")
+            if preview.validation_errors:
+                reasons.append(f"{len(preview.validation_errors)}个校验错误")
+            if reasons:
+                self.submit_reason_label.configure(text="原因: " + "、".join(reasons))
+            else:
+                self.submit_reason_label.configure(text="请检查各项内容后重试")
+
+    def _update_files_list(self, files):
+        if not files:
+            self.preview_files_list.insert(tk.END, "(暂无待打包文件)")
+            self.preview_files_list.insert(tk.END, "")
+            self.preview_files_list.insert(tk.END, "可能原因:")
+            self.preview_files_list.insert(tk.END, "  1. 尚未创建批次")
+            self.preview_files_list.insert(tk.END, "  2. 尚未上传或生成材料")
+            self.preview_files_list.insert(tk.END, "  3. 批次中未确认任何文件")
+            self.preview_files_list.configure(foreground="#888")
+            return
+
+        for i, f in enumerate(files, 1):
+            status = "✓" if f.get('confirmed') else "○"
+            name = f.get('name', f.get('original_name', '未知文件'))
+            source = f.get('source', '未知来源')
+            size = f.get('size', '')
+            line = f"{status} {name}"
+            if size:
+                line += f" ({size})"
+            self.preview_files_list.insert(tk.END, line)
+            self.preview_files_list.insert(tk.END, f"     来源: {source}")
+            if f.get('original_path'):
+                self.preview_files_list.insert(tk.END, f"     路径: {f['original_path']}")
+            self.preview_files_list.insert(tk.END, "")
+
+    def _update_missing_list(self, missing_required, missing_optional):
+        if not missing_required and not missing_optional:
+            self.preview_missing_list.insert(tk.END, "✓ 所有材料已齐全")
+            self.preview_missing_list.configure(foreground="#2e7d32")
+            return
+
+        if missing_required:
+            self.preview_missing_list.insert(tk.END, "【必填材料缺失】")
+            for m in missing_required:
+                self.preview_missing_list.insert(tk.END, f"  ✗ {m.code} - {m.name}")
+            if missing_optional:
+                self.preview_missing_list.insert(tk.END, "")
+
+        if missing_optional:
+            self.preview_missing_list.insert(tk.END, "【选填材料缺失】")
+            for m in missing_optional:
+                self.preview_missing_list.insert(tk.END, f"  ○ {m.code} - {m.name}")
+
+    def _update_sensitive_list(self, warnings):
+        if not warnings:
+            self.preview_sensitive_list.insert(tk.END, "✓ 未检测到敏感词")
+            self.preview_sensitive_list.configure(foreground="#2e7d32")
+            return
+
+        for i, w in enumerate(warnings, 1):
+            file_name = w.get('file', '未知文件')
+            words = ', '.join(w.get('words', []))
+            line_no = w.get('line', '?')
+            self.preview_sensitive_list.insert(tk.END, f"{i}. {file_name}")
+            self.preview_sensitive_list.insert(tk.END, f"   敏感词: {words}")
+            self.preview_sensitive_list.insert(tk.END, f"   位置: 第{line_no}行")
+            self.preview_sensitive_list.insert(tk.END, "")
+
+    def _update_errors_list(self, errors):
+        if not errors:
+            self.preview_errors_list.insert(tk.END, "✓ 无校验错误")
+            self.preview_errors_list.configure(foreground="#2e7d32")
+            return
+
+        for i, e in enumerate(errors, 1):
+            self.preview_errors_list.insert(tk.END, f"{i}. ✗ {e}")
+
+    def _update_warnings_list(self, warnings):
+        if not warnings:
+            self.preview_warnings_list.insert(tk.END, "✓ 无校验警告")
+            self.preview_warnings_list.configure(foreground="#2e7d32")
+            return
+
+        for i, w in enumerate(warnings, 1):
+            self.preview_warnings_list.insert(tk.END, f"{i}. ⚠ {w}")
+
+    def _update_warning_display(self, preview):
+        if preview.validation_errors or preview.missing_required:
+            self.warning_label.configure(text="⚠ 存在错误，建议返回修正后再打包")
+            self.ignore_errors_check.pack(side=tk.LEFT, padx=20)
+        else:
+            self.warning_label.configure(text="")
+            self.ignore_errors_check.pack_forget()
 
     def _update_validation_display(self, preview):
         self.val_errors_list.delete(0, tk.END)
@@ -1265,42 +1387,83 @@ class DataTradingToolApp:
 
     def _build_package(self):
         if not self.submission_preview:
-            messagebox.showwarning("提示", "请先刷新预览")
+            messagebox.showwarning("提示", "请先点击【刷新检查】生成预览")
             return
 
-        if not self.submission_preview.can_submit:
+        if not self.submission_preview.can_submit and not self.ignore_errors_var.get():
             if not messagebox.askyesno("确认", "存在必填材料缺失或校验错误，确定要继续打包吗？"):
                 return
 
-        try:
-            self.package_log.configure(state="normal")
-            self.package_log.delete("1.0", tk.END)
-            self.package_log.insert(tk.END, f"开始打包...\n时间: {self._current_time()}\n\n")
-            self.package_log.update()
+        self.package_log.configure(state="normal")
+        self.package_log.delete("1.0", tk.END)
+        self.package_log.insert(tk.END, f"{'='*60}\n")
+        self.package_log.insert(tk.END, f"开始打包\n")
+        self.package_log.insert(tk.END, f"{'='*60}\n")
+        self.package_log.insert(tk.END, f"时间: {self._current_time()}\n")
+        self.package_log.insert(tk.END, f"项目: {self.project_info.product_name}\n")
+        self.package_log.insert(tk.END, f"产品编码: {self.project_info.product_code}\n")
 
+        current_batch = self.material_list.get_current_batch()
+        if current_batch:
+            self.package_log.insert(tk.END, f"批次: {current_batch.batch_name} ({current_batch.batch_id})\n")
+        self.package_log.insert(tk.END, "\n")
+        self.package_log.update()
+
+        try:
             packager = PackageOutput(self.project_info, self.material_list,
                                       self.generated_files, self.validation_result)
-            result = packager.build_package(ignore_errors=not self.submission_preview.can_submit)
 
-            self.package_log.insert(tk.END, f"打包完成！\n")
-            self.package_log.insert(tk.END, f"压缩包路径: {result['zip_path']}\n")
-            self.package_log.insert(tk.END, f"包含文件: {result['file_count']} 个\n")
-            self.package_log.insert(tk.END, f"清单文件: {result['checklist_path']}\n")
+            ignore_errors = self.ignore_errors_var.get() or not self.submission_preview.can_submit
+            self.package_log.insert(tk.END, f"[1/4] 收集文件...\n")
+            self.package_log.update()
+
+            result = packager.build_package(ignore_errors=ignore_errors)
+
+            if not result.get('success', True):
+                error_msg = result.get('error', '未知错误')
+                self.package_log.insert(tk.END, f"\n✗ 打包失败\n")
+                self.package_log.insert(tk.END, f"错误原因: {error_msg}\n")
+                self.package_log.configure(state="disabled")
+                messagebox.showerror("打包失败", f"打包失败: {error_msg}")
+                return
+
+            self.package_log.insert(tk.END, f"[2/4] 生成提交清单...\n")
+            self.package_log.insert(tk.END, f"[3/4] 创建压缩包...\n")
+            self.package_log.insert(tk.END, f"[4/4] 保存记录...\n\n")
+            self.package_log.update()
+
+            self.package_log.insert(tk.END, f"✓ 打包完成！\n\n")
+            self.package_log.insert(tk.END, f"📦 压缩包路径:\n   {result['zip_path']}\n\n")
+            self.package_log.insert(tk.END, f"📄 提交清单:\n   {result['checklist_path']}\n\n")
+            self.package_log.insert(tk.END, f"📊 包含文件: {result['file_count']} 个\n")
+
+            if result.get('output_files'):
+                self.package_log.insert(tk.END, "\n文件清单:\n")
+                for i, f in enumerate(result['output_files'], 1):
+                    self.package_log.insert(tk.END, f"  {i:2d}. {f.get('name', f.get('original_name', ''))}\n")
 
             self.last_zip_path = result['zip_path']
             self.last_checklist_path = result['checklist_path']
+            self.package_result = result
 
             self._save_generation_record(result)
 
             self.package_log.insert(tk.END, f"\n✓ 记录已保存到历史记录\n")
+            self.package_log.insert(tk.END, f"{'='*60}\n")
             self.package_log.configure(state="disabled")
 
-            messagebox.showinfo("成功", f"打包完成！\n\n压缩包: {result['zip_path']}")
+            messagebox.showinfo("成功", f"打包完成！\n\n压缩包: {result['zip_path']}\n文件数: {result['file_count']}")
 
         except Exception as e:
-            self.package_log.insert(tk.END, f"\n✗ 打包失败: {str(e)}\n")
+            import traceback
+            error_detail = traceback.format_exc()
+            self.package_log.insert(tk.END, f"\n✗ 打包失败\n")
+            self.package_log.insert(tk.END, f"错误类型: {type(e).__name__}\n")
+            self.package_log.insert(tk.END, f"错误信息: {str(e)}\n")
+            self.package_log.insert(tk.END, f"\n详细信息:\n{error_detail}\n")
+            self.package_log.insert(tk.END, f"{'='*60}\n")
             self.package_log.configure(state="disabled")
-            messagebox.showerror("错误", f"打包失败: {str(e)}")
+            messagebox.showerror("打包失败", f"打包失败: {str(e)}\n\n请查看打包日志获取详细信息。")
 
     def _view_checklist(self):
         if hasattr(self, 'last_checklist_path') and self.last_checklist_path:
@@ -1373,19 +1536,29 @@ class DataTradingToolApp:
         self.search_contact.pack(side=tk.LEFT, padx=5)
 
         ttk.Label(row2, text="交易场景:", width=10).pack(side=tk.LEFT, padx=(10, 0))
-        self.search_scene = ttk.Combobox(row2, values=[""] + SCENES, width=25, state="readonly")
+        self.search_scene = ttk.Combobox(row2, values=[""] + SCENES, width=20, state="readonly")
         self.search_scene.pack(side=tk.LEFT, padx=5)
         self.search_scene.current(0)
 
-        ttk.Label(row2, text="开始日期:", width=10).pack(side=tk.LEFT, padx=(10, 0))
-        self.search_start_date = ttk.Entry(row2, width=15)
+        ttk.Label(row2, text="校验错误:", width=10).pack(side=tk.LEFT, padx=(10, 0))
+        self.search_has_errors = ttk.Combobox(row2, values=["", "有错误", "无错误"], width=12, state="readonly")
+        self.search_has_errors.pack(side=tk.LEFT, padx=5)
+        self.search_has_errors.current(0)
+
+        row3 = ttk.Frame(search_frame)
+        row3.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row3, text="开始日期:", width=10).pack(side=tk.LEFT)
+        self.search_start_date = ttk.Entry(row3, width=18)
         self.search_start_date.pack(side=tk.LEFT, padx=5)
         self.search_start_date.insert(0, "")
+        ttk.Label(row3, text="(YYYY-MM-DD)", foreground="#888").pack(side=tk.LEFT)
 
-        ttk.Label(row2, text="结束日期:", width=10).pack(side=tk.LEFT, padx=(10, 0))
-        self.search_end_date = ttk.Entry(row2, width=15)
+        ttk.Label(row3, text="结束日期:", width=10).pack(side=tk.LEFT, padx=(10, 0))
+        self.search_end_date = ttk.Entry(row3, width=18)
         self.search_end_date.pack(side=tk.LEFT, padx=5)
         self.search_end_date.insert(0, "")
+        ttk.Label(row3, text="(YYYY-MM-DD)", foreground="#888").pack(side=tk.LEFT)
 
         btn_frame = ttk.Frame(search_frame)
         btn_frame.pack(fill=tk.X, pady=10)
@@ -1438,6 +1611,12 @@ class DataTradingToolApp:
         scene = self.search_scene.get().strip()
         start_date = self.search_start_date.get().strip()
         end_date = self.search_end_date.get().strip()
+        has_errors_text = self.search_has_errors.get().strip()
+        has_errors = ""
+        if has_errors_text == "有错误":
+            has_errors = "yes"
+        elif has_errors_text == "无错误":
+            has_errors = "no"
 
         records = self.record_manager.search_records(
             project_id=project_id,
@@ -1446,7 +1625,8 @@ class DataTradingToolApp:
             contact_person=contact_person,
             start_date=start_date,
             end_date=end_date,
-            scene=scene
+            scene=scene,
+            has_errors=has_errors
         )
 
         self._populate_records_tree(records)
@@ -1457,6 +1637,7 @@ class DataTradingToolApp:
         self.search_product_name.delete(0, tk.END)
         self.search_contact.delete(0, tk.END)
         self.search_scene.current(0)
+        self.search_has_errors.current(0)
         self.search_start_date.delete(0, tk.END)
         self.search_end_date.delete(0, tk.END)
         self._refresh_records_list()
@@ -1491,15 +1672,22 @@ class DataTradingToolApp:
         values = item['values']
         project_id = values[0]
         product_code = values[1]
+        batch_name = values[5]
         created_at = values[7]
 
-        records = self.record_manager.search_records(
-            project_id=project_id,
-            product_code=product_code
-        )
-        for rec in records:
-            if rec.get('created_at') == created_at:
+        all_records = self.record_manager.get_all_records()
+        for rec in all_records:
+            if (rec.get('project_id') == project_id and
+                rec.get('product_code') == product_code and
+                rec.get('batch_name') == batch_name and
+                rec.get('created_at') == created_at):
                 return rec
+
+        for rec in all_records:
+            if (rec.get('project_id') == project_id and
+                rec.get('created_at') == created_at):
+                return rec
+
         return None
 
     def _view_record_detail(self):
@@ -1509,26 +1697,74 @@ class DataTradingToolApp:
 
         win = tk.Toplevel(self.root)
         win.title(f"记录详情 - {record['product_name']}")
-        win.geometry("900x650")
+        win.geometry("950x700")
         win.grab_set()
 
+        summary_frame = ttk.LabelFrame(win, text="📊 本次打包结果", padding=10)
+        summary_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        vr = record.get('validation_result', {})
+        passed = vr.get('passed', False)
+        error_count = len(vr.get('errors', []))
+        warning_count = len(vr.get('warnings', []))
+        sensitive_count = len(vr.get('sensitive_warnings', []))
+
+        row1 = ttk.Frame(summary_frame)
+        row1.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row1, text="📦 压缩包:", width=12, font=('Microsoft YaHei', 10, 'bold')).pack(side=tk.LEFT)
+        zip_path = record.get('zip_path', 'N/A')
+        ttk.Label(row1, text=zip_path, foreground="#2e7d32").pack(side=tk.LEFT)
+
+        row2 = ttk.Frame(summary_frame)
+        row2.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row2, text="📄 提交清单:", width=12, font=('Microsoft YaHei', 10, 'bold')).pack(side=tk.LEFT)
+        checklist_path = record.get('checklist_path', 'N/A')
+        ttk.Label(row2, text=checklist_path, foreground="#2e7d32").pack(side=tk.LEFT)
+
+        row3 = ttk.Frame(summary_frame)
+        row3.pack(fill=tk.X, pady=5)
+
+        ttk.Label(row3, text="📊 文件数量:", width=12, font=('Microsoft YaHei', 10, 'bold')).pack(side=tk.LEFT)
+        file_count = record.get('file_count', 0)
+        ttk.Label(row3, text=f"{file_count} 个文件", foreground="#2e7d32").pack(side=tk.LEFT)
+
+        ttk.Label(row3, text="     ✅ 校验结论:", width=18, font=('Microsoft YaHei', 10, 'bold')).pack(side=tk.LEFT)
+        if passed:
+            status_text = "通过"
+            status_color = "#2e7d32"
+        else:
+            status_text = f"未通过 ({error_count}个错误, {warning_count}个警告, {sensitive_count}个敏感词)"
+            status_color = "#c62828"
+        ttk.Label(row3, text=status_text, foreground=status_color, font=('Microsoft YaHei', 10, 'bold')).pack(side=tk.LEFT)
+
         notebook = ttk.Notebook(win)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
         info_frame = ttk.Frame(notebook, padding=10)
-        notebook.add(info_frame, text="项目信息")
+        notebook.add(info_frame, text="📋 项目信息")
 
         info_text = scrolledtext.ScrolledText(info_frame, font=('Consolas', 10))
         info_text.pack(fill=tk.BOTH, expand=True)
 
         info_text.insert(tk.END, "项目信息\n")
         info_text.insert(tk.END, f"{'='*60}\n\n")
+        info_text.insert(tk.END, f"项目编号: {record.get('project_id', 'N/A')}\n")
+        info_text.insert(tk.END, f"产品名称: {record.get('product_name', 'N/A')}\n")
+        info_text.insert(tk.END, f"产品编码: {record.get('product_code', 'N/A')}\n")
+        info_text.insert(tk.END, f"交易场景: {record.get('scene', 'N/A')}\n")
+        info_text.insert(tk.END, f"联系人: {record.get('contact_person', 'N/A')}\n")
+        info_text.insert(tk.END, f"生成时间: {record.get('created_at', 'N/A')}\n")
+        info_text.insert(tk.END, f"批次: {record.get('batch_name', 'N/A')} ({record.get('batch_id', 'N/A')})\n\n")
+
         pi = record.get('project_info', {})
         for key, value in pi.items():
-            info_text.insert(tk.END, f"{key}: {value}\n")
+            if value:
+                info_text.insert(tk.END, f"{key}: {value}\n")
 
         materials_frame = ttk.Frame(notebook, padding=10)
-        notebook.add(materials_frame, text="材料状态")
+        notebook.add(materials_frame, text="📁 材料状态")
 
         mat_text = scrolledtext.ScrolledText(materials_frame, font=('Consolas', 10))
         mat_text.pack(fill=tk.BOTH, expand=True)
@@ -1540,59 +1776,90 @@ class DataTradingToolApp:
         for m in materials:
             if m.get('generated'):
                 status = "已生成"
+                status_color = "#2e7d32"
             elif m.get('file_path'):
                 status = "已上传"
+                status_color = "#1565c0"
             else:
                 status = "未上传"
+                status_color = "#757575"
             req = "必填" if m.get('required') else "选填"
             batch_info = ""
             if m.get('batch_id'):
                 batch_info = f" [批次: {m['batch_id']}]"
-            mat_text.insert(tk.END, f"[{req}] {m['code']} - {m['name']} ({status}){batch_info}\n")
+            mat_text.insert(tk.END, f"[{req}] {m['code']} - {m['name']} ")
+            mat_text.insert(tk.END, f"({status}){batch_info}\n", f"status_{status}")
             if m.get('file_path'):
-                mat_text.insert(tk.END, f"     文件路径: {m['file_path']}\n")
+                mat_text.insert(tk.END, f"     📄 文件路径: {m['file_path']}\n")
             if m.get('generated_at'):
-                mat_text.insert(tk.END, f"     生成时间: {m['generated_at']}\n")
+                mat_text.insert(tk.END, f"     🕐 生成时间: {m['generated_at']}\n")
+            mat_text.insert(tk.END, "\n")
+
+        mat_text.tag_configure("status_已生成", foreground="#2e7d32")
+        mat_text.tag_configure("status_已上传", foreground="#1565c0")
+        mat_text.tag_configure("status_未上传", foreground="#757575")
 
         val_frame = ttk.Frame(notebook, padding=10)
-        notebook.add(val_frame, text="校验报告")
+        notebook.add(val_frame, text="✅ 校验报告")
 
         val_text = scrolledtext.ScrolledText(val_frame, font=('Consolas', 10))
         val_text.pack(fill=tk.BOTH, expand=True)
 
-        vr = record.get('validation_result', {})
         val_text.insert(tk.END, "校验报告\n")
         val_text.insert(tk.END, f"{'='*60}\n\n")
         val_text.insert(tk.END, f"校验时间: {vr.get('timestamp', 'N/A')}\n")
-        val_text.insert(tk.END, f"通过: {'是' if vr.get('passed') else '否'}\n\n")
+        val_text.insert(tk.END, f"校验结论: {'✅ 通过' if passed else '❌ 未通过'}\n")
+        val_text.insert(tk.END, f"错误数量: {error_count} 个\n")
+        val_text.insert(tk.END, f"警告数量: {warning_count} 个\n")
+        val_text.insert(tk.END, f"敏感词警告: {sensitive_count} 个\n\n")
 
-        val_text.insert(tk.END, "错误:\n")
-        for e in vr.get('errors', []):
-            val_text.insert(tk.END, f"  ✗ {e}\n")
+        if error_count > 0:
+            val_text.insert(tk.END, "❌ 错误:\n", "error")
+            for e in vr.get('errors', []):
+                val_text.insert(tk.END, f"  ✗ {e}\n", "error")
+            val_text.insert(tk.END, "\n")
 
-        val_text.insert(tk.END, "\n警告:\n")
-        for w in vr.get('warnings', []):
-            val_text.insert(tk.END, f"  ⚠ {w}\n")
+        if warning_count > 0:
+            val_text.insert(tk.END, "⚠️ 警告:\n", "warning")
+            for w in vr.get('warnings', []):
+                val_text.insert(tk.END, f"  ⚠ {w}\n", "warning")
+            val_text.insert(tk.END, "\n")
 
-        val_text.insert(tk.END, "\n敏感词警告:\n")
-        for sw in vr.get('sensitive_warnings', []):
-            val_text.insert(tk.END, f"  ⚠ 文件: {sw.get('file')}, 敏感词: {', '.join(sw.get('words', []))}\n")
+        if sensitive_count > 0:
+            val_text.insert(tk.END, "🚨 敏感词警告:\n", "sensitive")
+            for sw in vr.get('sensitive_warnings', []):
+                val_text.insert(tk.END, f"  📄 文件: {sw.get('file')}\n", "sensitive")
+                val_text.insert(tk.END, f"     敏感词: {', '.join(sw.get('words', []))}\n", "sensitive")
+                if sw.get('line'):
+                    val_text.insert(tk.END, f"     位置: 第{sw['line']}行\n", "sensitive")
+                val_text.insert(tk.END, "\n")
+
+        if error_count == 0 and warning_count == 0 and sensitive_count == 0:
+            val_text.insert(tk.END, "✅ 所有校验项通过，未发现问题。\n", "success")
+
+        val_text.tag_configure("error", foreground="#c62828")
+        val_text.tag_configure("warning", foreground="#ef6c00")
+        val_text.tag_configure("sensitive", foreground="#d84315")
+        val_text.tag_configure("success", foreground="#2e7d32")
 
         files_frame = ttk.Frame(notebook, padding=10)
-        notebook.add(files_frame, text="生成文件")
+        notebook.add(files_frame, text="📦 生成文件")
 
         files_text = scrolledtext.ScrolledText(files_frame, font=('Consolas', 10))
         files_text.pack(fill=tk.BOTH, expand=True)
 
         files_text.insert(tk.END, "生成的文件\n")
         files_text.insert(tk.END, f"{'='*60}\n\n")
-        files_text.insert(tk.END, f"压缩包: {record.get('zip_path', 'N/A')}\n")
-        files_text.insert(tk.END, f"清单文件: {record.get('checklist_path', 'N/A')}\n")
-        files_text.insert(tk.END, f"批次: {record.get('batch_name', 'N/A')} ({record.get('batch_id', 'N/A')})\n\n")
+        files_text.insert(tk.END, f"📦 压缩包路径: {zip_path}\n")
+        files_text.insert(tk.END, f"📄 提交清单: {checklist_path}\n")
+        files_text.insert(tk.END, f"📊 文件数量: {file_count} 个\n")
+        files_text.insert(tk.END, f"🏷️  批次: {record.get('batch_name', 'N/A')} ({record.get('batch_id', 'N/A')})\n\n")
 
         gf = record.get('generated_files', {})
-        for code, path in gf.items():
-            files_text.insert(tk.END, f"  {code}: {path}\n")
+        if gf:
+            files_text.insert(tk.END, "📝 生成文件清单:\n")
+            for code, path in gf.items():
+                files_text.insert(tk.END, f"  {code}: {path}\n")
 
         info_text.configure(state="disabled")
         mat_text.configure(state="disabled")
@@ -1624,6 +1891,10 @@ class DataTradingToolApp:
             return
 
         try:
+            from core.content_validator import ValidationResult
+            if self.validation_result is None:
+                self.validation_result = ValidationResult()
+
             self.record_manager.restore_record(
                 record,
                 self.project_info,
@@ -1632,10 +1903,21 @@ class DataTradingToolApp:
                 self.validation_result
             )
 
+            self.last_zip_path = record.get('zip_path', '')
+            self.last_checklist_path = record.get('checklist_path', '')
+            self.package_result = {
+                'zip_path': self.last_zip_path,
+                'checklist_path': self.last_checklist_path,
+                'file_count': record.get('file_count', 0)
+            }
+
             self._refresh_project_info_ui()
             self._refresh_materials_tree()
             self._refresh_material_status()
             self._refresh_batch_list()
+            self._refresh_generated_files_list()
+            self._refresh_validation_display()
+            self._refresh_submission_preview()
             self._update_step_buttons()
 
             if win:
@@ -1644,10 +1926,84 @@ class DataTradingToolApp:
             messagebox.showinfo("成功", "记录已恢复！\n\n"
                                       f"项目: {record.get('product_name')}\n"
                                       f"批次: {record.get('batch_name', 'N/A')}\n"
-                                      f"时间: {record.get('created_at')}")
+                                      f"时间: {record.get('created_at')}\n\n"
+                                      f"所有步骤（项目信息、材料清单、模板生成、\n"
+                                      f"内容校验、打包输出）已同步到当时的状态。")
 
         except Exception as e:
-            messagebox.showerror("错误", f"恢复失败: {str(e)}")
+            import traceback
+            error_detail = traceback.format_exc()
+            messagebox.showerror("错误", f"恢复失败: {str(e)}\n\n{error_detail}")
+
+    def _refresh_validation_display(self):
+        if self.validation_result is None:
+            return
+
+        result = self.validation_result
+
+        if hasattr(self, 'validation_result_text') and self.validation_result_text.winfo_exists():
+            self.validation_result_text.configure(state="normal")
+            self.validation_result_text.delete("1.0", tk.END)
+            self.validation_result_text.insert(tk.END, f"内容校验报告（历史恢复）\n{'='*60}\n\n")
+            self.validation_result_text.insert(tk.END, f"校验时间：{result.timestamp or self._current_time()}\n")
+            self.validation_result_text.insert(tk.END, f"产品名称：{self.project_info.product_name}\n")
+            if self.material_list.get_current_batch():
+                self.validation_result_text.insert(tk.END, f"当前批次：{self.material_list.get_current_batch().batch_name}\n")
+            self.validation_result_text.insert(tk.END, "\n")
+
+            if result.errors:
+                self.validation_result_text.insert(tk.END, f"【错误】({len(result.errors)}项)\n", "error")
+                for i, err in enumerate(result.errors, 1):
+                    self.validation_result_text.insert(tk.END, f"  {i}. {err}\n", "error")
+                self.validation_result_text.insert(tk.END, "\n")
+
+            if result.warnings:
+                self.validation_result_text.insert(tk.END, f"【警告】({len(result.warnings)}项)\n", "warning")
+                for i, warn in enumerate(result.warnings, 1):
+                    self.validation_result_text.insert(tk.END, f"  {i}. {warn}\n", "warning")
+                self.validation_result_text.insert(tk.END, "\n")
+
+            if result.sensitive_hits:
+                self.validation_result_text.insert(tk.END, f"【敏感词检测】({len(result.sensitive_hits)}处)\n", "sensitive")
+                for i, hit in enumerate(result.sensitive_hits, 1):
+                    self.validation_result_text.insert(tk.END,
+                        f"  {i}. '{hit['word']}' 在【{hit['location']}】中\n", "sensitive")
+                    if 'context' in hit:
+                        self.validation_result_text.insert(tk.END, f"     上下文：{hit['context']}\n", "sensitive")
+                self.validation_result_text.insert(tk.END, "\n")
+
+            if not result.has_errors and not result.has_warnings:
+                self.validation_result_text.insert(tk.END, "✓ 所有校验项通过，未发现问题。\n", "success")
+
+            self.validation_result_text.tag_config("error", foreground="#FF0000", font=('Microsoft YaHei', 10, 'bold'))
+            self.validation_result_text.tag_config("warning", foreground="#FFA500", font=('Microsoft YaHei', 10))
+            self.validation_result_text.tag_config("sensitive", foreground="#FF6347", font=('Microsoft YaHei', 10))
+            self.validation_result_text.tag_config("success", foreground="#00B050", font=('Microsoft YaHei', 10, 'bold'))
+            self.validation_result_text.configure(state="disabled")
+
+        if hasattr(self, 'validation_summary') and self.validation_summary.winfo_exists():
+            if result.has_errors:
+                self.validation_summary.configure(text=f"校验结果：存在 {len(result.errors)} 个错误，请修正后继续", foreground="#FF0000")
+            elif result.has_warnings:
+                self.validation_summary.configure(text=f"校验结果：存在 {len(result.warnings)} 个警告，建议检查后继续", foreground="#FFA500")
+            else:
+                self.validation_summary.configure(text="校验结果：全部通过 ✓", foreground="#00B050")
+
+    def _refresh_generated_files_list(self):
+        if not hasattr(self, 'generated_files_tree') or not self.generated_files_tree.winfo_exists():
+            return
+
+        for item in self.generated_files_tree.get_children():
+            self.generated_files_tree.delete(item)
+
+        if self.generated_files:
+            for code, path in self.generated_files.items():
+                material = self.material_list.get_material_by_code(code)
+                name = material.name if material else code
+                status = "已生成"
+                self.generated_files_tree.insert("", "end", values=(code, name, status, path))
+        else:
+            self.generated_files_tree.insert("", "end", values=("", "（暂无生成文件）", "", ""))
 
     def _delete_record(self):
         record = self._get_selected_record()

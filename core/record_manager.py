@@ -75,7 +75,8 @@ class RecordManager:
     def search_records(self, project_id: str = "", product_code: str = "",
                        product_name: str = "", contact_person: str = "",
                        start_date: str = "", end_date: str = "",
-                       scene: str = "", batch_id: str = "") -> List[Dict]:
+                       scene: str = "", batch_id: str = "",
+                       has_errors: str = "") -> List[Dict]:
         records = self._load_records()
         results = []
         for record in records:
@@ -102,6 +103,13 @@ class RecordManager:
             if end_date:
                 record_date = record.get("created_at") or record.get("generated_at", "")
                 if record_date > end_date + " 23:59:59":
+                    match = False
+            if has_errors:
+                val_result = record.get("validation_result", {})
+                record_has_errors = val_result.get("has_errors", False) or len(val_result.get("errors", [])) > 0
+                if has_errors == "yes" and not record_has_errors:
+                    match = False
+                if has_errors == "no" and record_has_errors:
                     match = False
 
             if match:
