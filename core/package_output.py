@@ -51,39 +51,83 @@ class PackageOutput:
         files_to_include = []
         file_mapping = self._collect_confirmed_files()
 
-        for file_info in file_mapping:
-            original_path = Path(file_info["original_path"])
-            files_to_include.append({
-                "material_code": file_info["material_code"],
-                "material_name": file_info["material_name"],
-                "original_path": file_info["original_path"],
-                "original_name": original_path.name,
-                "is_generated": file_info["is_generated"],
-                "file_size": original_path.stat().st_size if original_path.exists() else 0,
-                "exists": original_path.exists()
-            })
+        current_batch = self.materials.get_current_batch()
+        confirmed_codes = set()
+        if current_batch and current_batch.confirmed_files:
+            for cf in current_batch.confirmed_files:
+                for item in self.materials.items:
+                    if item.file_path == cf or (item.code in self.generated_files and self.generated_files[item.code] == cf):
+                        confirmed_codes.add(item.code)
+                        break
 
-        missing_required = self.materials.get_missing_required()
-        missing_optional = self.materials.get_all_missing()
-        missing_optional = [m for m in missing_optional if not m.required]
+        for file_info in file_mapping:
+            try:
+                original_path = Path(file_info["original_path"])
+                file_size = original_path.stat().st_size if original_path.exists() else 0
+                size_str = self._format_file_size(file_size)
+                source = "模板生成" if file_info.get("is_generated", False) else "用户上传"
+                confirmed = file_info["material_code"] in confirmed_codes
+
+                files_to_include.append({
+                    "material_code": file_info["material_code"],
+                    "material_name": file_info["material_name"],
+                    "original_path": file_info["original_path"],
+                    "original_name": original_path.name,
+                    "name": original_path.name,
+                    "is_generated": file_info.get("is_generated", False),
+                    "source": source,
+                    "file_size": file_size,
+                    "size": size_str,
+                    "confirmed": confirmed,
+                    "exists": original_path.exists()
+                })
+            except Exception as e:
+                print(f"处理文件预览时出错: {file_info.get('original_path', 'unknown')}, {e}")
+                continue
+
+        missing_required = []
+        missing_optional = []
+        try:
+            missing_required = self.materials.get_missing_required()
+            all_missing = self.materials.get_all_missing()
+            missing_optional = [m for m in all_missing if not m.required]
+        except Exception as e:
+            print(f"获取缺失材料时出错: {e}")
 
         sensitive_warnings = []
         validation_errors = []
         validation_warnings = []
 
         if self.validation_result:
-            sensitive_warnings = self.validation_result.sensitive_hits
-            validation_errors = self.validation_result.errors
-            validation_warnings = [
-                w for w in self.validation_result.warnings
-                if not any(h["word"] in w for h in self.validation_result.sensitive_hits)
-            ]
+            try:
+                sensitive_hits = getattr(self.validation_result, 'sensitive_hits', [])
+                sensitive_warnings = []
+                for hit in sensitive_hits:
+                    sensitive_warnings.append({
+                        "file": hit.get("file", hit.get("location", "unknown")),
+                        "words": hit.get("words", [hit.get("word", "")]),
+                        "line": hit.get("line", 0),
+                        "context": hit.get("context", "")
+                    })
 
-        can_submit = (
-            len(missing_required) == 0
-            and len(files_to_include) > 0
-            and all(f["exists"] for f in files_to_include)
-        )
+                validation_errors = list(getattr(self.validation_result, 'errors', []))
+                all_warnings = list(getattr(self.validation_result, 'warnings', []))
+                validation_warnings = [
+                    w for w in all_warnings
+                    if not any(h.get("word", "") in w for h in sensitive_hits)
+                ]
+            except Exception as e:
+                print(f"处理校验结果时出错: {e}")
+
+        can_submit = False
+        try:
+            can_submit = (
+                len(missing_required) == 0
+                and len(files_to_include) > 0
+                and all(f.get("exists", False) for f in files_to_include)
+            )
+        except Exception as e:
+            print(f"计算can_submit时出错: {e}")
 
         return SubmissionPreview(
             files_to_include=files_to_include,
@@ -94,6 +138,14 @@ class PackageOutput:
             validation_warnings=validation_warnings,
             can_submit=can_submit
         )
+
+    def _format_file_size(self, size_bytes: int) -> str:
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        else:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
 
     def build_package(self, ignore_errors: bool = False, use_batch: bool = True) -> Dict:
         result = {
@@ -125,11 +177,12 @@ class PackageOutput:
 
         renamed_files = self._rename_files_by_platform_rule(file_mapping)
         checklist_path = self._generate_submission_checklist(renamed_files, file_mapping)
-        result["checklist_path"] = checklist_path
-        renamed_files.append(checklist_path)
+        result["checklist_path"] = str(checklist_path)
+        renamed_files.append(str(checklist_path))
         zip_path = self._create_zip_package(renamed_files)
-        result["zip_path"] = zip_path
-        result["output_files"] = renamed_files
+        result["zip_path"] = str(zip_path)
+        result["output_files"] = [str(f) for f in renamed_files]
+        result["file_count"] = len(renamed_files)
         result["success"] = True
         return result
 

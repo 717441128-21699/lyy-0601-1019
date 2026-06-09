@@ -39,6 +39,19 @@ class DataTradingToolApp:
 
         self.material_list.on_change_callback = self._on_materials_change
 
+        self.project_name_var = tk.StringVar()
+        self.project_code_var = tk.StringVar()
+        self.project_id_var = tk.StringVar(value=self.project_info.project_id)
+        self.source_var = tk.StringVar()
+        self.freq_var = tk.StringVar()
+        self.scene_var = tk.StringVar()
+        self.contact_var = tk.StringVar()
+        self.phone_var = tk.StringVar()
+        self.email_var = tk.StringVar()
+        self.valid_from_var = tk.StringVar()
+        self.valid_to_var = tk.StringVar()
+        self.volume_var = tk.StringVar()
+
         self.steps = [
             ("项目信息", self._create_step1),
             ("材料清单", self._create_step2),
@@ -200,71 +213,75 @@ class DataTradingToolApp:
         basic_frame = ttk.LabelFrame(scrollable_frame, text="基本信息", style="Section.TLabelframe", padding=15)
         basic_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        self._create_label_entry(basic_frame, "数据产品名称 *", 0, 0,
-                                getattr(self.project_info, 'product_name', ''),
-                                lambda v: setattr(self.project_info, 'product_name', v))
-        self._create_label_entry(basic_frame, "产品编码", 0, 2,
-                                getattr(self.project_info, 'product_code', ''),
-                                lambda v: setattr(self.project_info, 'product_code', v))
-        self._create_label_entry(basic_frame, "数据来源 *", 1, 0,
-                                getattr(self.project_info, 'data_source', ''),
-                                lambda v: setattr(self.project_info, 'data_source', v))
-        self._create_label_combobox(basic_frame, "更新频率 *", 1, 2,
-                                   UPDATE_FREQUENCIES,
-                                   getattr(self.project_info, 'update_frequency', ''),
-                                   lambda v: setattr(self.project_info, 'update_frequency', v))
-        self._create_label_combobox(basic_frame, "交易场景 *", 2, 0,
-                                   TRADING_SCENARIOS,
-                                   getattr(self.project_info, 'trading_scene', ''),
-                                   lambda v: setattr(self.project_info, 'trading_scene', v))
-        self._create_label_entry(basic_frame, "数据量级", 2, 2,
-                                getattr(self.project_info, 'data_volume', ''),
-                                lambda v: setattr(self.project_info, 'data_volume', v))
+        self._create_label_entry_with_var(basic_frame, "项目编号", 0, 0,
+                                        self.project_id_var,
+                                        lambda v: setattr(self.project_info, 'project_id', v),
+                                        state="readonly")
+        self._create_label_entry_with_var(basic_frame, "数据产品名称 *", 0, 2,
+                                        self.project_name_var,
+                                        lambda v: setattr(self.project_info, 'product_name', v))
+        self._create_label_entry_with_var(basic_frame, "产品编码", 1, 0,
+                                        self.project_code_var,
+                                        lambda v: setattr(self.project_info, 'product_code', v))
+        self._create_label_entry_with_var(basic_frame, "数据来源 *", 1, 2,
+                                        self.source_var,
+                                        lambda v: setattr(self.project_info, 'data_source', v))
+        self._create_label_combobox_with_var(basic_frame, "更新频率 *", 2, 0,
+                                            UPDATE_FREQUENCIES,
+                                            self.freq_var,
+                                            lambda v: setattr(self.project_info, 'update_frequency', v))
+        self._create_label_combobox_with_var(basic_frame, "交易场景 *", 2, 2,
+                                            SCENES,
+                                            self.scene_var,
+                                            lambda v: setattr(self.project_info, 'scene', v))
+        self._create_label_entry_with_var(basic_frame, "数据量级", 3, 0,
+                                        self.volume_var,
+                                        lambda v: setattr(self.project_info, 'data_volume', v))
 
         desc_frame = ttk.LabelFrame(scrollable_frame, text="产品描述", style="Section.TLabelframe", padding=15)
         desc_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Label(desc_frame, text="详细描述：").grid(row=0, column=0, sticky=tk.W, pady=5)
-        desc_text = scrolledtext.ScrolledText(desc_frame, height=5, font=('Microsoft YaHei', 10))
-        desc_text.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=5)
+        self.desc_text = scrolledtext.ScrolledText(desc_frame, height=5, font=('Microsoft YaHei', 10))
+        self.desc_text.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=5)
         if self.project_info.data_description:
-            desc_text.insert(tk.END, self.project_info.data_description)
-        desc_text.bind('<KeyRelease>', lambda e: setattr(self.project_info, 'data_description',
-                                                        desc_text.get("1.0", tk.END).strip()))
+            self.desc_text.insert(tk.END, self.project_info.data_description)
+        self.desc_text.bind('<KeyRelease>', lambda e: setattr(self.project_info, 'data_description',
+                                                            self.desc_text.get("1.0", tk.END).strip()))
         desc_frame.columnconfigure(1, weight=1)
         desc_frame.columnconfigure(2, weight=1)
 
         usage_frame = ttk.LabelFrame(scrollable_frame, text="使用限制", style="Section.TLabelframe", padding=15)
         usage_frame.pack(fill=tk.X, padx=10, pady=10)
         ttk.Label(usage_frame, text="使用限制说明：").grid(row=0, column=0, sticky=tk.W, pady=5)
-        usage_text = scrolledtext.ScrolledText(usage_frame, height=4, font=('Microsoft YaHei', 10))
-        usage_text.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=5)
-        if self.project_info.usage_restrictions:
-            usage_text.insert(tk.END, self.project_info.usage_restrictions)
-        usage_text.bind('<KeyRelease>', lambda e: setattr(self.project_info, 'usage_restrictions',
-                                                         usage_text.get("1.0", tk.END).strip()))
+        self.limits_text = scrolledtext.ScrolledText(usage_frame, height=4, font=('Microsoft YaHei', 10))
+        self.limits_text.grid(row=1, column=0, columnspan=3, sticky=tk.EW, pady=5)
+        if self.project_info.usage_limits:
+            self.limits_text.insert(tk.END, self.project_info.usage_limits)
+        self.limits_text.bind('<KeyRelease>', lambda e: setattr(self.project_info, 'usage_limits',
+                                                               self.limits_text.get("1.0", tk.END).strip()))
         usage_frame.columnconfigure(1, weight=1)
         usage_frame.columnconfigure(2, weight=1)
 
         contact_frame = ttk.LabelFrame(scrollable_frame, text="联系信息", style="Section.TLabelframe", padding=15)
         contact_frame.pack(fill=tk.X, padx=10, pady=10)
-        self._create_label_entry(contact_frame, "联系人 *", 0, 0,
-                                getattr(self.project_info, 'contact_person', ''),
-                                lambda v: setattr(self.project_info, 'contact_person', v))
-        self._create_label_entry(contact_frame, "联系电话 *", 0, 2,
-                                getattr(self.project_info, 'contact_phone', ''),
-                                lambda v: setattr(self.project_info, 'contact_phone', v))
-        self._create_label_entry(contact_frame, "电子邮箱", 1, 0,
-                                getattr(self.project_info, 'contact_email', ''),
-                                lambda v: setattr(self.project_info, 'contact_email', v))
+        self._create_label_entry_with_var(contact_frame, "联系人 *", 0, 0,
+                                        self.contact_var,
+                                        lambda v: setattr(self.project_info, 'contact_person', v))
+        self._create_label_entry_with_var(contact_frame, "联系电话 *", 0, 2,
+                                        self.phone_var,
+                                        lambda v: setattr(self.project_info, 'contact_phone', v))
+        self._create_label_entry_with_var(contact_frame, "电子邮箱", 1, 0,
+                                        self.email_var,
+                                        lambda v: setattr(self.project_info, 'contact_email', v))
 
         validity_frame = ttk.LabelFrame(scrollable_frame, text="授权有效期", style="Section.TLabelframe", padding=15)
         validity_frame.pack(fill=tk.X, padx=10, pady=10)
-        self._create_label_entry(validity_frame, "有效期开始 * (YYYY-MM-DD)", 0, 0,
-                                getattr(self.project_info, 'valid_from', ''),
-                                lambda v: setattr(self.project_info, 'valid_from', v))
-        self._create_label_entry(validity_frame, "有效期截止 * (YYYY-MM-DD)", 0, 2,
-                                getattr(self.project_info, 'valid_to', ''),
-                                lambda v: setattr(self.project_info, 'valid_to', v))
+        self._create_label_entry_with_var(validity_frame, "有效期开始 * (YYYY-MM-DD)", 0, 0,
+                                        self.valid_from_var,
+                                        lambda v: setattr(self.project_info, 'valid_from', v))
+        self._create_label_entry_with_var(validity_frame, "有效期截止 * (YYYY-MM-DD)", 0, 2,
+                                        self.valid_to_var,
+                                        lambda v: setattr(self.project_info, 'valid_to', v))
 
         fields_frame = ttk.LabelFrame(scrollable_frame, text="样例字段", style="Section.TLabelframe", padding=15)
         fields_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -312,6 +329,18 @@ class DataTradingToolApp:
     def _create_label_combobox(self, parent, label, row, col, values, value, callback):
         ttk.Label(parent, text=label).grid(row=row, column=col, sticky=tk.W, pady=8, padx=5)
         var = tk.StringVar(value=value)
+        cb = ttk.Combobox(parent, values=values, textvariable=var, state="readonly")
+        cb.grid(row=row, column=col + 1, sticky=tk.EW, pady=8, padx=5)
+        var.trace_add('write', lambda *args: callback(var.get()))
+
+    def _create_label_entry_with_var(self, parent, label, row, col, var, callback, state="normal"):
+        ttk.Label(parent, text=label).grid(row=row, column=col, sticky=tk.W, pady=8, padx=5)
+        entry = ttk.Entry(parent, textvariable=var, state=state)
+        entry.grid(row=row, column=col + 1, sticky=tk.EW, pady=8, padx=5)
+        var.trace_add('write', lambda *args: callback(var.get()))
+
+    def _create_label_combobox_with_var(self, parent, label, row, col, values, var, callback):
+        ttk.Label(parent, text=label).grid(row=row, column=col, sticky=tk.W, pady=8, padx=5)
         cb = ttk.Combobox(parent, values=values, textvariable=var, state="readonly")
         cb.grid(row=row, column=col + 1, sticky=tk.EW, pady=8, padx=5)
         var.trace_add('write', lambda *args: callback(var.get()))
@@ -1506,13 +1535,24 @@ class DataTradingToolApp:
 
         mat_text.insert(tk.END, "材料清单\n")
         mat_text.insert(tk.END, f"{'='*60}\n\n")
-        materials = record.get('materials', {}).get('materials', [])
+        materials_data = record.get('materials', {})
+        materials = materials_data.get('materials', materials_data.get('items', []))
         for m in materials:
-            status = "已上传" if m.get('file_path') else "未上传"
+            if m.get('generated'):
+                status = "已生成"
+            elif m.get('file_path'):
+                status = "已上传"
+            else:
+                status = "未上传"
             req = "必填" if m.get('required') else "选填"
-            mat_text.insert(tk.END, f"[{req}] {m['code']} - {m['name']} ({status})\n")
+            batch_info = ""
+            if m.get('batch_id'):
+                batch_info = f" [批次: {m['batch_id']}]"
+            mat_text.insert(tk.END, f"[{req}] {m['code']} - {m['name']} ({status}){batch_info}\n")
             if m.get('file_path'):
-                mat_text.insert(tk.END, f"     文件: {m['file_path']}\n")
+                mat_text.insert(tk.END, f"     文件路径: {m['file_path']}\n")
+            if m.get('generated_at'):
+                mat_text.insert(tk.END, f"     生成时间: {m['generated_at']}\n")
 
         val_frame = ttk.Frame(notebook, padding=10)
         notebook.add(val_frame, text="校验报告")
@@ -1638,12 +1678,20 @@ class DataTradingToolApp:
         self.source_var.set(self.project_info.data_source or "")
         self.freq_var.set(self.project_info.update_frequency or "")
         self.scene_var.set(self.project_info.scene or "")
-        self.limits_text.delete("1.0", tk.END)
-        self.limits_text.insert("1.0", self.project_info.usage_limits or "")
+        self.volume_var.set(self.project_info.data_volume or "")
+        self.email_var.set(self.project_info.contact_email or "")
         self.contact_var.set(self.project_info.contact_person or "")
         self.phone_var.set(self.project_info.contact_phone or "")
         self.valid_from_var.set(self.project_info.valid_from or "")
         self.valid_to_var.set(self.project_info.valid_to or "")
+
+        if hasattr(self, 'limits_text') and self.limits_text.winfo_exists():
+            self.limits_text.delete("1.0", tk.END)
+            self.limits_text.insert("1.0", self.project_info.usage_limits or "")
+
+        if hasattr(self, 'desc_text') and self.desc_text.winfo_exists():
+            self.desc_text.delete("1.0", tk.END)
+            self.desc_text.insert("1.0", self.project_info.data_description or "")
 
     def _current_time(self):
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

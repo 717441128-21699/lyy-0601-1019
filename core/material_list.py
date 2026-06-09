@@ -192,14 +192,16 @@ class MaterialList:
         return self.get_provided()
 
     def to_dict(self) -> dict:
+        materials = [item.to_dict() for item in self.items]
         return {
-            "items": [item.to_dict() for item in self.items],
+            "items": materials,
+            "materials": materials,
             "batches": [batch.to_dict() for batch in self.batches],
             "current_batch_id": self.current_batch_id
         }
 
     def from_dict(self, data: dict) -> None:
-        items_data = data.get("items", []) if isinstance(data, dict) else data
+        items_data = data.get("items", data.get("materials", [])) if isinstance(data, dict) else data
         if isinstance(data, dict):
             self.items = []
             for item_data in items_data:

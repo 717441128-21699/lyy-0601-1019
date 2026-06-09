@@ -24,6 +24,22 @@ class ProjectInfo:
     project_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
+    @property
+    def scene(self) -> str:
+        return self.trading_scene
+
+    @scene.setter
+    def scene(self, value: str) -> None:
+        self.trading_scene = value
+
+    @property
+    def usage_limits(self) -> str:
+        return self.usage_restrictions
+
+    @usage_limits.setter
+    def usage_limits(self, value: str) -> None:
+        self.usage_restrictions = value
+
     def to_dict(self) -> dict:
         return {
             "project_id": self.project_id,
